@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
-import { Settings, Loader2, Save, Bell, ScrollText } from "lucide-react"
+import { Settings, Loader2, Save, Bell, ScrollText, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ToggleSwitch } from "@/components/ui/toggle-switch"
 import { MarketStatusBadge } from "@/components/layout/MarketStatusBadge"
 import { notificationsApi } from "@/api/notifications"
+import { authApi } from "@/api/auth"
 
 const EVENT_KEYS = [
   "signal",
@@ -19,8 +21,27 @@ const EVENT_KEYS = [
   "security",
 ]
 
+const DEFAULT_AI_CHART = {
+  enabled: true,
+  cooldownSeconds: 120,
+  modelId: "",
+}
+const DEFAULT_PRE = {
+  enabled: false,
+  mode: "warn",
+  runQuickBacktest: true,
+  candleCount: 180,
+  timeframe: "H1",
+  minTrades: 10,
+  minWinRate: 40,
+  minExpectancy: 0,
+  maxDrawdownPercent: 25,
+}
+
 export default function SettingsPage() {
   const [prefs, setPrefs] = useState(null)
+  const [aiChart, setAiChart] = useState(DEFAULT_AI_CHART)
+  const [preSignal, setPreSignal] = useState(DEFAULT_PRE)
   const [audit, setAudit] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -30,14 +51,28 @@ export default function SettingsPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [p, a] = await Promise.all([
+      const [p, a, pref] = await Promise.all([
         notificationsApi.preferences(),
         notificationsApi.audit({ limit: 40 }),
+        authApi.getPreferences().catch(() => ({ preferences: {} })),
       ])
       setPrefs(p.preferences)
       setAudit(a.logs || [])
+      setPreSignal({
+        ...DEFAULT_PRE,
+        ...(pref.preferences?.preSignalValidation || {}),
+      })
+      setAiChart({
+        ...DEFAULT_AI_CHART,
+        ...(pref.preferences?.aiChartAssist || {}),
+      })
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to load settings")
+      setError(
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "Failed to load settings"
+      )
     } finally {
       setLoading(false)
     }
@@ -54,7 +89,7 @@ export default function SettingsPage() {
     try {
       const data = await notificationsApi.savePreferences(prefs)
       setPrefs(data.preferences)
-      setSuccess("Preferences saved")
+      setSuccess("Notification preferences saved")
       await load()
     } catch (err) {
       setError(err?.response?.data?.message || "Save failed")
@@ -63,15 +98,19 @@ export default function SettingsPage() {
     }
   }
 
-  const test = async (channel) => {
+  const savePreSignal = async () => {
     setSaving(true)
     setError("")
+    setSuccess("")
     try {
-      await notificationsApi.test(channel)
-      setSuccess(`Test notification sent (${channel})`)
-      await load()
+      const data = await authApi.savePreferences({ preSignalValidation: preSignal, aiChartAssist: aiChart })
+      setPreSignal({
+        ...DEFAULT_PRE,
+        ...(data.preferences?.preSignalValidation || preSignal),
+      })
+      setSuccess(data.message || "Pre-signal preferences saved")
     } catch (err) {
-      setError(err?.response?.data?.message || "Test failed")
+      setError(err?.response?.data?.message || "Failed to save pre-signal settings")
     } finally {
       setSaving(false)
     }
@@ -94,7 +133,7 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Notifications · Telegram · Discord · Email · Audit trail
+            Notifications · pre-signal validation · audit trail
           </p>
         </div>
         <MarketStatusBadge />
@@ -111,56 +150,149 @@ export default function SettingsPage() {
         </div>
       )}
 
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI chart assist</CardTitle>
+          <CardDescription>
+            On-demand annotation on the Charts page always uses a selected strategy (rules + plotted levels).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-300">Enable for my account</span>
+            <ToggleSwitch
+              checked={Boolean(aiChart.enabled)}
+              onChange={(v) => setAiChart((c) => ({ ...c, enabled: v }))}
+            />
+          </div>
+          <p className="text-xs text-slate-500">
+            Open Charts → select strategy → AI annotate. Results are cached; admin sets hourly limits.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-brand-gold" />
+            Pre-signal validation
+          </CardTitle>
+          <CardDescription>
+            Optional quick backtest and metric gates before a signal is accepted. Admin can force
+            this globally; your settings apply when global is off or as additional preferences.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-300">Enable for my account</span>
+            <ToggleSwitch
+              checked={Boolean(preSignal.enabled)}
+              onChange={(v) => setPreSignal((c) => ({ ...c, enabled: v }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Mode</Label>
+            <select
+              value={preSignal.mode}
+              onChange={(e) => setPreSignal((c) => ({ ...c, mode: e.target.value }))}
+              className="flex h-10 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-3 text-sm text-brand-silver"
+            >
+              <option value="warn">Warn only (still allow signal)</option>
+              <option value="block">Block failing signals</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-300">Run quick backtest</span>
+            <ToggleSwitch
+              checked={Boolean(preSignal.runQuickBacktest)}
+              onChange={(v) => setPreSignal((c) => ({ ...c, runQuickBacktest: v }))}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              ["candleCount", "Backtest candles"],
+              ["minTrades", "Min trades"],
+              ["minWinRate", "Min win rate %"],
+              ["minExpectancy", "Min expectancy"],
+              ["maxDrawdownPercent", "Max DD %"],
+            ].map(([key, label]) => (
+              <div key={key} className="space-y-1">
+                <Label>{label}</Label>
+                <Input
+                  type="number"
+                  value={preSignal[key]}
+                  onChange={(e) =>
+                    setPreSignal((c) => ({
+                      ...c,
+                      [key]: e.target.value === "" ? "" : Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+            ))}
+            <div className="space-y-1">
+              <Label>Timeframe</Label>
+              <select
+                value={preSignal.timeframe}
+                onChange={(e) => setPreSignal((c) => ({ ...c, timeframe: e.target.value }))}
+                className="flex h-10 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-3 text-sm text-brand-silver"
+              >
+                {["M15", "H1", "H4", "D1"].map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Button onClick={savePreSignal} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save validation & AI chart prefs
+          </Button>
+        </CardContent>
+      </Card>
+
       {prefs && (
         <>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-brand-gold" />
-                Channels
+                <Bell className="h-5 w-5 text-brand-cyan" />
+                Notification channels
               </CardTitle>
-              <CardDescription>
-                In-app is always recommended. Email uses Zoho SMTP. Telegram needs bot token on
-                server + your chat id. Discord uses an incoming webhook URL.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                ["inApp", "In-app notifications"],
-                ["email", "Email (Zoho)"],
-                ["telegram", "Telegram"],
-                ["discord", "Discord webhook"],
-              ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(prefs[key])}
-                    onChange={(e) => setPrefs((p) => ({ ...p, [key]: e.target.checked }))}
-                  />
-                  {label}
-                </label>
-              ))}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label>Telegram chat id</Label>
-                  <Input
-                    value={prefs.telegramChatId || ""}
-                    onChange={(e) =>
-                      setPrefs((p) => ({ ...p, telegramChatId: e.target.value }))
-                    }
-                    placeholder="123456789"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Discord webhook URL</Label>
-                  <Input
-                    value={prefs.discordWebhookUrl || ""}
-                    onChange={(e) =>
-                      setPrefs((p) => ({ ...p, discordWebhookUrl: e.target.value }))
-                    }
-                    placeholder="https://discord.com/api/webhooks/..."
-                  />
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-300">In-app</span>
+                <ToggleSwitch
+                  checked={prefs.inApp !== false}
+                  onChange={(v) => setPrefs((p) => ({ ...p, inApp: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-300">Email</span>
+                <ToggleSwitch
+                  checked={!!prefs.email}
+                  onChange={(v) => setPrefs((p) => ({ ...p, email: v }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Telegram chat ID</Label>
+                <Input
+                  value={prefs.telegramChatId || ""}
+                  onChange={(e) => setPrefs((p) => ({ ...p, telegramChatId: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Discord webhook URL</Label>
+                <Input
+                  value={prefs.discordWebhookUrl || ""}
+                  onChange={(e) =>
+                    setPrefs((p) => ({ ...p, discordWebhookUrl: e.target.value }))
+                  }
+                  placeholder="https://discord.com/api/webhooks/..."
+                />
               </div>
             </CardContent>
           </Card>
@@ -171,35 +303,29 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="grid gap-2 sm:grid-cols-2">
               {EVENT_KEYS.map((k) => (
-                <label key={k} className="flex items-center gap-2 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
+                <div
+                  key={k}
+                  className="flex items-center justify-between gap-4 text-sm text-slate-300"
+                >
+                  <span>{k}</span>
+                  <ToggleSwitch
                     checked={prefs.events?.[k] !== false}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setPrefs((p) => ({
                         ...p,
-                        events: { ...p.events, [k]: e.target.checked },
+                        events: { ...p.events, [k]: v },
                       }))
                     }
                   />
-                  {k}
-                </label>
+                </div>
               ))}
             </CardContent>
           </Card>
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save preferences
-            </Button>
-            <Button variant="outline" disabled={saving} onClick={() => test("inApp")}>
-              Test in-app
-            </Button>
-            <Button variant="outline" disabled={saving} onClick={() => test("email")}>
-              Test email path
-            </Button>
-          </div>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save notification preferences
+          </Button>
         </>
       )}
 
@@ -209,7 +335,9 @@ export default function SettingsPage() {
             <ScrollText className="h-5 w-5 text-brand-cyan" />
             Your audit trail
           </CardTitle>
-          <CardDescription>Recent actions recorded for this account</CardDescription>
+          <CardDescription>
+            Includes pre-signal pass / warn / block events when validation is enabled
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 max-h-80 overflow-y-auto">
           {!audit.length ? (

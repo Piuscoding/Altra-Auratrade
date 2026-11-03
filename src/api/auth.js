@@ -24,4 +24,12 @@ export const authApi = {
   logout: async () => {
     await api.post("/auth/logout")
   },
+  getPreferences: async () => {
+    const { data } = await api.get("/auth/preferences")
+    return data
+  },
+  savePreferences: async (payload) => {
+    const { data } = await api.patch("/auth/preferences", payload)
+    return data
+  },
 }

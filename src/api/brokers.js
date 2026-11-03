@@ -37,4 +37,8 @@ export const brokersApi = {
     const { data } = await api.post(`/brokers/${id}/sync`)
     return data
   },
+  syncOrders: async (id) => {
+    const { data } = await api.post(`/brokers/${id}/sync-orders`)
+    return data
+  },
 }

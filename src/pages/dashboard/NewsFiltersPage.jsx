@@ -1,27 +1,33 @@
 import { useEffect, useState } from "react"
-import { Newspaper, Loader2 } from "lucide-react"
+import { Newspaper, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { MarketStatusBadge } from "@/components/layout/MarketStatusBadge"
-import { tradingApi } from "@/api/trading"
+import api from "@/api/client"
+import { brokersApi } from "@/api/brokers"
 
 export default function NewsFiltersPage() {
   const [events, setEvents] = useState([])
-  const [name, setName] = useState("FOMC")
-  const [minutes, setMinutes] = useState(15)
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
+  const [source, setSource] = useState("")
   const [message, setMessage] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [accounts, setAccounts] = useState([])
+  const [error, setError] = useState("")
 
   const load = async () => {
     setLoading(true)
+    setError("")
     try {
-      const data = await tradingApi.upcomingNews()
+      const [{ data }, b] = await Promise.all([
+        api.get("/market/calendar", { params: { days: 7 } }),
+        brokersApi.list(),
+      ])
       setEvents(data.events || [])
-    } catch {
-      setEvents([])
+      setSource(data.source || "")
+      setMessage(data.message || "")
+      setAccounts(b.accounts || [])
+    } catch (err) {
+      setError(err?.response?.data?.message || "Failed to load calendar")
     } finally {
       setLoading(false)
     }
@@ -31,116 +37,130 @@ export default function NewsFiltersPage() {
     load()
   }, [])
 
-  const seed = async () => {
-    setBusy(true)
-    setMessage("")
+  const toggleAccountNews = async (acc) => {
     try {
-      const data = await tradingApi.seedDemoNews({
-        name,
-        minutesFromNow: Number(minutes) || 15,
+      await brokersApi.updateSettings(acc._id, {
+        isNewsFilterEnabled: !acc.isNewsFilterEnabled,
       })
-      setMessage(data.message)
       await load()
     } catch (err) {
-      setMessage(err?.response?.data?.message || "Seed failed")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const clear = async () => {
-    setBusy(true)
-    try {
-      await tradingApi.clearDemoNews()
-      setMessage("Demo events cleared")
-      await load()
-    } finally {
-      setBusy(false)
+      setError(err?.response?.data?.message || "Update failed")
     }
   }
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Newspaper className="h-7 w-7 text-brand-cyan" />
+            <Newspaper className="h-7 w-7 text-rose-400" />
             News Filters
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            High-impact events block signals before session and risk checks
+            Live economic calendar · blocks new signals near high-impact releases
           </p>
         </div>
-        <MarketStatusBadge />
+        <div className="flex items-center gap-2">
+          <MarketStatusBadge />
+          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>How it works</CardTitle>
+          <CardTitle>How news filtering works</CardTitle>
           <CardDescription>
-            Built-in watch list includes FOMC, CPI, NFP, GDP, ECB, BOE, RBA, BOJ. When an event is
-            within ±30 minutes, new signals are marked skipped_due_to_news. Risk adjustment only
-            runs when news filter is disabled on the account.
+            When enabled on a broker account, the trading engine checks the live calendar before
+            accepting a signal. If a high-impact event falls inside the blackout window, the signal is
+            skipped (not sent to the broker). You can customize watched events per account from Brokers.
           </CardDescription>
         </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Demo calendar (testing)</CardTitle>
-          <CardDescription>
-            Seed a high-impact event to verify the filter without a live economic calendar feed.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Event name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Minutes from now</Label>
-              <Input
-                type="number"
-                value={minutes}
-                onChange={(e) => setMinutes(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={seed}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Seed event
-            </Button>
-            <Button variant="outline" disabled={busy} onClick={clear}>
-              Clear demo events
-            </Button>
-          </div>
-          {message && <p className="text-sm text-slate-400">{message}</p>}
+        <CardContent className="text-sm text-slate-400 space-y-1">
+          <p>• Providers: Finance Calendar and JB News / JBlanked (primary); Finnhub and FMP as fallbacks. Admin selects the preferred source.</p>
+          <p>• Default watch list includes FOMC, CPI, NFP, GDP, ECB, BOE when configured on the account.</p>
+          <p>• Charts also plot nearby high-impact markers with estimated pip shock.</p>
         </CardContent>
       </Card>
 
+      {error && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming / active demo events</CardTitle>
+          <CardTitle>Upcoming economic events</CardTitle>
+          <CardDescription>
+            Source: {source || "—"}
+            {message ? ` · ${message}` : ""}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2 max-h-96 overflow-y-auto">
           {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-brand-cyan" />
-          ) : events.length === 0 ? (
-            <p className="text-sm text-slate-500">No demo events in window</p>
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-brand-cyan" />
+            </div>
+          ) : !events.length ? (
+            <p className="text-sm text-slate-500">
+              No events returned. Set FINANCECALENDAR_API_KEY and/or JBNEWS_API_KEY on the API server, then choose the provider in Admin → Settings.
+            </p>
           ) : (
-            <ul className="space-y-2">
-              {events.map((ev, i) => (
-                <li
-                  key={i}
-                  className="rounded-lg border border-brand-slate/50 px-3 py-2 text-sm text-slate-300"
-                >
-                  <span className="text-white font-medium">{ev.name}</span> ·{" "}
-                  {new Date(ev.time).toLocaleString()} · {ev.impact}
-                </li>
-              ))}
-            </ul>
+            events.map((e) => (
+              <div
+                key={e.id}
+                className="rounded-lg border border-brand-slate/50 px-3 py-2 text-sm"
+              >
+                <p className="text-white font-medium">
+                  {e.name}{" "}
+                  <span className="text-xs text-slate-500 uppercase">{e.impact}</span>
+                </p>
+                <p className="text-xs text-slate-500">
+                  {e.country} · {new Date(e.time).toLocaleString()}
+                  {e.estimate != null ? ` · est ${e.estimate}` : ""}
+                  {e.actual != null ? ` · act ${e.actual}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-slate-600">
+        Economic calendar data may include sources such as{" "}
+        <a
+          href="https://www.financecalendar.com"
+          target="_blank"
+          rel="noreferrer"
+          className="text-brand-cyan hover:underline"
+        >
+          Finance Calendar
+        </a>{" "}
+        and JBlanked / JB News per admin configuration.
+      </p>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Broker account news switches</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {!accounts.length ? (
+            <p className="text-sm text-slate-500">No broker accounts yet</p>
+          ) : (
+            accounts.map((acc) => (
+              <div
+                key={acc._id}
+                className="flex items-center justify-between rounded-lg border border-brand-slate/50 px-3 py-2 text-sm"
+              >
+                <span className="text-white">{acc.name}</span>
+                <Button size="sm" variant="outline" onClick={() => toggleAccountNews(acc)}>
+                  News filter {acc.isNewsFilterEnabled ? "ON" : "OFF"}
+                </Button>
+              </div>
+            ))
           )}
         </CardContent>
       </Card>

@@ -42,6 +42,7 @@ export default function BrokersPage() {
     oandaAccountId: "",
     oandaToken: "",
     ibkrAccountId: "",
+    ibkrToken: "",
     balance: "10000",
   })
   const [assignMap, setAssignMap] = useState({})
@@ -95,6 +96,7 @@ export default function BrokersPage() {
         oandaAccountId: "",
         oandaToken: "",
         ibkrAccountId: "",
+    ibkrToken: "",
         balance: "10000",
       })
       await load()
@@ -212,17 +214,7 @@ export default function BrokersPage() {
         </div>
       </div>
 
-      <div
-        className={`rounded-lg border px-4 py-3 text-sm ${
-          metaApiConfigured
-            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-            : "border-amber-500/30 bg-amber-500/10 text-amber-200"
-        }`}
-      >
-        {metaApiConfigured
-          ? "METAAPI_TOKEN is configured — live MetaApi provisioning is available."
-          : "METAAPI_TOKEN not set — accounts still connect in offline/demo mode until MetaApi location verification succeeds."}
-      </div>
+      
 
       {error && (
         <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
@@ -279,14 +271,21 @@ export default function BrokersPage() {
                   <option value="others">Other</option>
                 </select>
               </div>
+              {form.type === "demo" && (
               <div className="space-y-2">
-                <Label>Starting balance</Label>
+                <Label>Starting balance (demo only)</Label>
                 <Input
                   type="number"
                   value={form.balance}
                   onChange={(e) => setForm((f) => ({ ...f, balance: e.target.value }))}
                 />
               </div>
+              )}
+              {form.type !== "demo" && (
+                <p className="text-xs text-slate-500 sm:col-span-2">
+                  Live / prop balance is pulled automatically after a successful broker connection and Sync.
+                </p>
+              )}
 
               {form.provider === "metaapi" && (
                 <>
@@ -362,6 +361,9 @@ export default function BrokersPage() {
                     value={form.ibkrAccountId}
                     onChange={(e) => setForm((f) => ({ ...f, ibkrAccountId: e.target.value }))}
                   />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Requires IBKR Client Portal Gateway (IBKR_GATEWAY_URL). Optional session token field: ibkrToken in payload.
+                  </p>
                 </div>
               )}
 
@@ -382,7 +384,7 @@ export default function BrokersPage() {
       {accounts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-slate-400">
-            No broker accounts yet. Connect a demo account to start.
+            No broker accounts yet. Add a MetaApi, OANDA, or IBKR account to start.
           </CardContent>
         </Card>
       ) : (

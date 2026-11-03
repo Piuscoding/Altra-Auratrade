@@ -19,6 +19,10 @@ import BrokersPage from "@/pages/dashboard/BrokersPage"
 import ChartsPage from "@/pages/dashboard/ChartsPage"
 import SettingsPage from "@/pages/dashboard/SettingsPage"
 import NotificationsPage from "@/pages/dashboard/NotificationsPage"
+import AnalyticsPage from "@/pages/dashboard/AnalyticsPage"
+import BacktestPage from "@/pages/dashboard/BacktestPage"
+import PropChallengePage from "@/pages/dashboard/PropChallengePage"
+import JournalPage from "@/pages/dashboard/JournalPage"
 import AdminModelsPage from "@/pages/admin/AdminModelsPage"
 import AdminHome from "@/pages/admin/AdminHome"
 import AdminFeatureTogglesPage from "@/pages/admin/AdminFeatureTogglesPage"
@@ -133,7 +137,10 @@ export default function App() {
         <Route path="strategies/:id/review" element={<StrategyReviewPage />} />
         <Route path="terminal" element={<TerminalPage />} />
         <Route path="charts" element={<ChartsPage />} />
-        <Route path="analytics" element={<DashboardHome />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="backtest" element={<BacktestPage />} />
+        <Route path="prop" element={<PropChallengePage />} />
+        <Route path="journal" element={<JournalPage />} />
         <Route path="brokers" element={<BrokersPage />} />
         <Route path="sessions" element={<SessionsPage />} />
         <Route path="news" element={<NewsFiltersPage />} />

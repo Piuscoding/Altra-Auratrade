@@ -1,65 +1,67 @@
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-
-const SESSIONS = [
-  { name: "Sydney", open: 21, close: 6 },
-  { name: "Tokyo", open: 0, close: 9 },
-  { name: "London", open: 7, close: 16 },
-  { name: "New York", open: 12, close: 21 },
-]
-
-function getCurrentMarketStatus() {
-  const now = new Date()
-  const utcHour = now.getUTCHours()
-  const activeSessions = SESSIONS.filter((s) => {
-    if (s.open < s.close) {
-      return utcHour >= s.open && utcHour < s.close
-    }
-    return utcHour >= s.open || utcHour < s.close
-  })
-  const isOpen = activeSessions.length > 0
-  return {
-    isOpen,
-    currentSession: activeSessions.map((s) => s.name).join(" + ") || null,
-  }
-}
+import api from "@/api/client"
 
 export function MarketStatusBadge({ className }) {
-  const [status, setStatus] = useState(getCurrentMarketStatus())
+  const [status, setStatus] = useState({
+    isOpen: false,
+    label: "Checking…",
+    sessionLabel: "",
+  })
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStatus(getCurrentMarketStatus())
-    }, 60000)
-    return () => clearInterval(interval)
+    let alive = true
+    const load = async () => {
+      try {
+        const { data } = await api.get("/market/status")
+        if (alive) setStatus(data)
+      } catch {
+        // client-side fallback
+        const now = new Date()
+        const day = now.getUTCDay()
+        const mins = now.getUTCHours() * 60 + now.getUTCMinutes()
+        let open = true
+        if (day === 6) open = false
+        else if (day === 0) open = mins >= 22 * 60
+        else if (day === 5) open = mins < 22 * 60
+        if (alive) {
+          setStatus({
+            isOpen: open,
+            label: open ? "Market Open" : "Market Closed",
+            sessionLabel: open ? "Session check offline" : "Weekend / closed",
+          })
+        }
+      }
+    }
+    load()
+    const id = setInterval(load, 60_000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
   }, [])
 
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold border",
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
         status.isOpen
-          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
-          : "bg-red-500/15 border-red-500/40 text-red-400",
+          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+          : "border-slate-500/40 bg-slate-500/10 text-slate-400",
         className
       )}
+      title="Forex: Sun 22:00 UTC – Fri 22:00 UTC"
     >
       <span
         className={cn(
-          "h-2 w-2 rounded-full animate-pulse",
-          status.isOpen ? "bg-emerald-400" : "bg-red-400"
+          "h-2 w-2 rounded-full",
+          status.isOpen ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
         )}
       />
-      {status.isOpen ? (
-        <>
-          Market Open
-          {status.currentSession && (
-            <span className="opacity-80">· {status.currentSession}</span>
-          )}
-        </>
-      ) : (
-        "Market Closed"
-      )}
+      <span>
+        {status.label}
+        {status.sessionLabel ? ` · ${status.sessionLabel}` : ""}
+      </span>
     </div>
   )
 }

@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { strategiesApi } from "@/api/strategies"
+import { StrategyMetricsPanel } from "@/components/StrategyMetricsPanel"
+import { AutoSignalControls } from "@/components/AutoSignalControls"
 import { visionApi } from "@/api/vision"
 
 function confidenceColor(score) {
@@ -37,6 +39,7 @@ export default function StrategyReviewPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [targets, setTargets] = useState({ designatedRR: "2", targetWinRate: "50", rrMode: "designated" })
   const [rules, setRules] = useState({
     entry: "",
     stopLoss: "",
@@ -51,14 +54,20 @@ export default function StrategyReviewPage() {
     setError("")
     try {
       const sData = await strategiesApi.get(id)
-      setStrategy(sData.strategy)
-      const r = sData.strategy.rules || {}
+      const s = sData.strategy
+      setStrategy(s)
+      const r = s.rules || {}
       setRules({
         entry: r.entry || "",
         stopLoss: r.stopLoss || "",
         takeProfit: r.takeProfit || "",
-        minRR: r.minRR || "",
+        minRR: String(s.designatedRR || r.minRR || 2),
         direction: r.direction || "long_short",
+      })
+      setTargets({
+        designatedRR: String(s.designatedRR || r.minRR || 2),
+        targetWinRate: String(s.targetWinRate || 50),
+        rrMode: s.rrMode || "designated",
       })
       const corr = {}
       ;(sData.strategy.steps || []).forEach((st) => {
@@ -95,7 +104,8 @@ export default function StrategyReviewPage() {
         entry: r.entry || "",
         stopLoss: r.stopLoss || "",
         takeProfit: r.takeProfit || "",
-        minRR: r.minRR || "",
+        minRR: r.minRR || s.designatedRR || "",
+
         direction: r.direction || "long_short",
       })
       setSuccess(
@@ -225,6 +235,74 @@ export default function StrategyReviewPage() {
             <p className="text-sm mt-1">{confidenceLabel(score)}</p>
           </CardContent>
         </Card>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="text-base">Performance targets (RR / WR)</CardTitle>
+              <CardDescription>
+                Designated RR is used in backtests and as the default for future auto-signals.
+                Empirical mode uses the high-probability RR from backtest or demo data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label>Designated RR (reward : 1 risk)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={targets.designatedRR}
+                  onChange={(e) => setTargets((t) => ({ ...t, designatedRR: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Target win rate %</Label>
+                <Input
+                  type="number"
+                  value={targets.targetWinRate}
+                  onChange={(e) => setTargets((t) => ({ ...t, targetWinRate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>RR mode</Label>
+                <select
+                  value={targets.rrMode}
+                  onChange={(e) => setTargets((t) => ({ ...t, rrMode: e.target.value }))}
+                  className="flex h-11 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
+                >
+                  <option value="designated">Designated RR</option>
+                  <option value="empirical">High-probability (empirical)</option>
+                </select>
+              </div>
+              <div className="sm:col-span-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    try {
+                      const data = await strategiesApi.updateMetricsTargets(id, {
+                        designatedRR: Number(targets.designatedRR),
+                        targetWinRate: Number(targets.targetWinRate),
+                        rrMode: targets.rrMode,
+                      })
+                      setStrategy(data.strategy)
+                      setRules((r) => ({ ...r, minRR: String(data.strategy.designatedRR) }))
+                    } catch (err) {
+                      setError(err?.response?.data?.message || "Failed to save targets")
+                    }
+                  }}
+                >
+                  Save targets
+                </Button>
+              </div>
+              <div className="sm:col-span-3">
+                <StrategyMetricsPanel strategy={strategy} />
+              <div className="sm:col-span-3 mt-4">
+                <AutoSignalControls strategy={strategy} onUpdated={setStrategy} />
+              </div>
+              </div>
+            </CardContent>
+          </Card>
+
         <Card>
           <CardContent className="py-5">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Model</p>

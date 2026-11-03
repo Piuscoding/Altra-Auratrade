@@ -20,7 +20,7 @@ export default function AdminStrategiesPage() {
       const data = await adminApi.strategies(status || undefined)
       setStrategies(data.strategies || [])
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to load")
+      setError(err?.response?.data?.message || "Failed to load strategies")
     } finally {
       setLoading(false)
     }
@@ -31,14 +31,19 @@ export default function AdminStrategiesPage() {
   }, [status])
 
   const remove = async (id) => {
-    if (!confirm("Permanently delete this strategy? This cannot be undone. Users can only disable.")) {
+    if (
+      !window.confirm(
+        "Permanently delete this strategy? This cannot be undone. Users can only disable."
+      )
+    ) {
       return
     }
     setBusyId(id)
     setError("")
+    setSuccess("")
     try {
       const data = await adminApi.deleteStrategy(id)
-      setSuccess(data.message)
+      setSuccess(data.message || "Strategy deleted")
       await load()
     } catch (err) {
       setError(err?.response?.data?.message || "Delete failed")
@@ -110,14 +115,18 @@ export default function AdminStrategiesPage() {
                   disabled={busyId === s._id}
                   onClick={() => remove(s._id)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  {busyId === s._id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
                   Delete
                 </Button>
               </CardContent>
             </Card>
           ))}
           {strategies.length === 0 && (
-            <p className="text-sm text-slate-500">No strategies found</p>
+            <p className="text-sm text-slate-500 text-center py-8">No strategies found</p>
           )}
         </div>
       )}

@@ -24,9 +24,10 @@ function RankList({ title, items }) {
                 <span className="text-xs text-slate-500">({s.status})</span>
               </p>
               <p className="text-xs text-slate-500">
-                {s.userId?.email || "—"} · WR {(s.performance?.winRate || 0).toFixed?.(1) ?? s.performance?.winRate ?? 0}% · Exp{" "}
-                {s.performance?.expectancy ?? 0} · PF {s.performance?.profitFactor ?? 0} · DD{" "}
-                {s.performance?.maxDD ?? 0}
+                {s.userId?.email || "—"} · WR{" "}
+                {((s.metrics?.backtest?.winRate ?? s.performance?.winRate) || 0)}% · RR 1:
+                {s.designatedRR ?? "—"} · Exp {s.performance?.expectancy ?? 0} · PF{" "}
+                {s.performance?.profitFactor ?? 0} · DD {s.performance?.maxDD ?? 0}
               </p>
             </div>
           ))

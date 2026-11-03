@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react"
+import { useSearchParams } from "react-router-dom"
 import {
   createChart,
   ColorType,
@@ -16,44 +17,50 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label"
 import { MarketStatusBadge } from "@/components/layout/MarketStatusBadge"
 import { chartsApi } from "@/api/charts"
+import { FOREX_PAIRS, TIMEFRAMES, isSelectableStrategy } from "@/lib/forexPairs"
 import { strategiesApi } from "@/api/strategies"
-
-const PAIRS = [
-  "EURUSD",
-  "GBPUSD",
-  "USDJPY",
-  "AUDUSD",
-  "USDCAD",
-  "USDCHF",
-  "XAUUSD",
-  "GBPJPY",
-  "EURJPY",
-]
-
-const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
+import {
+  ChartDrawingLayer,
+  ChartDrawingToolbar,
+  ChartDrawingLayers,
+  loadDrawingsLocal,
+  saveDrawingsLocal,
+} from "@/components/charts/ChartDrawingLayer"
 
 export default function ChartsPage() {
+  const [searchParams] = useSearchParams()
   const containerRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
   const priceLinesRef = useRef([])
-  const [pair, setPair] = useState("EURUSD")
-  const [timeframe, setTimeframe] = useState("M15")
-  const [strategyId, setStrategyId] = useState("")
+  const [pair, setPair] = useState(() => searchParams.get("pair") || "EURUSD")
+  const [timeframe, setTimeframe] = useState(() => searchParams.get("timeframe") || "M15")
+  const [strategyId, setStrategyId] = useState(() => searchParams.get("strategyId") || "")
+  const [tradeId] = useState(() => searchParams.get("tradeId") || "")
+  const [signalId] = useState(() => searchParams.get("signalId") || "")
   const [strategies, setStrategies] = useState([])
   const [bundle, setBundle] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [drawTool, setDrawTool] = useState("cursor")
+  const [snapEnabled, setSnapEnabled] = useState(true)
+  const [syncNote, setSyncNote] = useState("")
+  const [isChartFullscreen, setIsChartFullscreen] = useState(false)
+  const [drawings, setDrawings] = useState([])
+  const [selectedDrawingId, setSelectedDrawingId] = useState(null)
+  const [drawingsReady, setDrawingsReady] = useState(false)
+  const [aiAnnotation, setAiAnnotation] = useState(null)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState("")
 
   useEffect(() => {
     strategiesApi
       .list()
       .then((d) => {
-        const list = (d.strategies || []).filter((s) =>
-          ["approved", "demo", "live", "review"].includes(s.status)
-        )
+        const list = (d.strategies || []).filter(isSelectableStrategy)
         setStrategies(list)
+        setStrategyId((current) => current || (list[0]?._id ? String(list[0]._id) : ""))
       })
       .catch(() => {})
   }, [])
@@ -87,8 +94,25 @@ export default function ChartsPage() {
       priceLinesRef.current.push(line)
     }
 
+    // Focus trade/signal markup (from journal / terminal deep-link)
+    const focus = data.focusMarkup
+    if (focus) {
+      addLine(focus.entry, "#22d3ee", "Focus entry", LineStyle.Solid)
+      addLine(focus.stopLoss, "#f43f5e", "Focus SL", LineStyle.Dashed)
+      addLine(focus.takeProfit, "#10b981", "Focus TP", LineStyle.Dashed)
+    }
+
+    // AI chart assist levels
+    const aiLevels = data.aiAnnotation?.levels || {}
+    if (aiLevels.support) addLine(Number(aiLevels.support), "#94a3b8", "AI support", LineStyle.Dotted)
+    if (aiLevels.resistance) addLine(Number(aiLevels.resistance), "#94a3b8", "AI resist", LineStyle.Dotted)
+    if (aiLevels.entry) addLine(Number(aiLevels.entry), "#a78bfa", "AI entry", LineStyle.Solid)
+    if (aiLevels.stopLoss) addLine(Number(aiLevels.stopLoss), "#fb7185", "AI SL", LineStyle.Dashed)
+    if (aiLevels.takeProfit) addLine(Number(aiLevels.takeProfit), "#6ee7b7", "AI TP", LineStyle.Dashed)
+    if (aiLevels.pivot) addLine(Number(aiLevels.pivot), "#fbbf24", "AI pivot", LineStyle.Dotted)
+
     // Strategy plotted levels
-    const levels = data.strategyLevels?.plottedLevels || {}
+    const levels = data.strategyLevels?.plottedLevels || data.focusMarkup?.plottedLevels || {}
     if (levels.entry) addLine(parseFloat(levels.entry), "#22d3ee", "Strategy entry", LineStyle.Dashed)
     if (levels.stopLoss) addLine(parseFloat(levels.stopLoss), "#f87171", "Strategy SL", LineStyle.Dashed)
     if (levels.takeProfit) addLine(parseFloat(levels.takeProfit), "#34d399", "Strategy TP", LineStyle.Dashed)
@@ -106,7 +130,7 @@ export default function ChartsPage() {
       addLine(ov.stopLoss, ov.profitLockActivated ? "#a78bfa" : "#ef4444", slTitle)
       addLine(ov.takeProfit, "#10b981", `${dir} TP`)
       if (ov.originalSL && ov.originalSL !== ov.stopLoss) {
-        addLine(ov.originalSL, "#fb923c", "Orig SL", LineStyle.SparseDotted)
+        addLine(ov.originalSL, "#fb923c", "Orig SL", LineStyle.Dotted)
       }
     }
   }, [])
@@ -213,21 +237,153 @@ export default function ChartsPage() {
         pair,
         timeframe,
         strategyId: strategyId || undefined,
+        tradeId: tradeId || undefined,
+        signalId: signalId || undefined,
         count: 220,
       })
+      if (data.pair && data.pair !== pair) setPair(data.pair)
+      if (data.focusMarkup?.strategyId && !strategyId) {
+        setStrategyId(String(data.focusMarkup.strategyId))
+      }
       setBundle(data)
       // defer chart paint after DOM paint
-      requestAnimationFrame(() => renderChart(data))
+      requestAnimationFrame(() =>
+        renderChart({ ...data, aiAnnotation: aiAnnotation || data.aiAnnotation })
+      )
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to load chart workspace")
     } finally {
       setLoading(false)
     }
-  }, [pair, timeframe, strategyId, renderChart])
+  }, [pair, timeframe, strategyId, tradeId, signalId, renderChart])
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!strategyId) {
+          if (!cancelled) setAiAnnotation(null)
+          return
+        }
+        const data = await chartsApi.getAiAnnotation({
+          pair,
+          timeframe,
+          strategyId,
+        })
+        if (!cancelled) setAiAnnotation(data.annotation || null)
+      } catch {
+        if (!cancelled) setAiAnnotation(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [pair, timeframe, strategyId])
+
+  const runAiAnnotate = async (force = false) => {
+    if (!strategyId) {
+      setAiError("Select one of your strategies — AI chart assist always plots using your strategy")
+      return
+    }
+    setAiBusy(true)
+    setAiError("")
+    try {
+      const data = await chartsApi.aiAnnotate({
+        pair,
+        timeframe,
+        strategyId,
+        force,
+      })
+      setAiAnnotation(data.annotation)
+      if (data.annotation) {
+        // Re-fetch workspace and paint with AI levels
+        const workspace = await chartsApi.workspace({
+          pair,
+          timeframe,
+          strategyId: strategyId || undefined,
+          tradeId: tradeId || undefined,
+          signalId: signalId || undefined,
+          count: 220,
+        })
+        setBundle(workspace)
+        requestAnimationFrame(() =>
+          renderChart({ ...workspace, aiAnnotation: data.annotation })
+        )
+      }
+    } catch (err) {
+      setAiError(err?.response?.data?.message || "AI annotation failed")
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!chartRef.current || !containerRef.current) return
+    const h = isChartFullscreen ? Math.max(400, window.innerHeight - 100) : 480
+    chartRef.current.applyOptions({
+      width: containerRef.current.clientWidth,
+      height: h,
+    })
+  }, [isChartFullscreen])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setDrawingsReady(false)
+      try {
+        const data = await chartsApi.getDrawings({ pair, timeframe })
+        if (!cancelled) {
+          const list = data.drawings?.length ? data.drawings : loadDrawingsLocal(pair, timeframe)
+          setDrawings(list)
+        }
+      } catch {
+        if (!cancelled) setDrawings(loadDrawingsLocal(pair, timeframe))
+      } finally {
+        if (!cancelled) setDrawingsReady(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [pair, timeframe])
+
+  const handleDrawingsChange = useCallback(
+    (next) => {
+      const list = typeof next === "function" ? next(drawings) : next
+      setDrawings(list)
+      saveDrawingsLocal(pair, timeframe, list)
+      setSyncNote("Saving…")
+      chartsApi
+        .saveDrawings({ pair, timeframe, drawings: list })
+        .then(() => setSyncNote("Synced"))
+        .catch(() => setSyncNote("Local only — server sync failed"))
+    },
+    [drawings, pair, timeframe]
+  )
+
+  const toggleDrawingFlag = useCallback(
+    (id, flag) => {
+      handleDrawingsChange(
+        drawings.map((d) => (d.id === id ? { ...d, [flag]: !d[flag] } : d))
+      )
+    },
+    [drawings, handleDrawingsChange]
+  )
+
+  const reorderDrawing = useCallback(
+    (from, to) => {
+      if (to < 0 || to >= drawings.length) return
+      const list = [...drawings]
+      const [item] = list.splice(from, 1)
+      list.splice(to, 0, item)
+      handleDrawingsChange(list)
+    },
+    [drawings, handleDrawingsChange]
+  )
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -286,7 +442,7 @@ export default function ChartsPage() {
               onChange={(e) => setPair(e.target.value)}
               className="flex h-10 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-3 text-sm text-brand-silver"
             >
-              {PAIRS.map((p) => (
+              {FOREX_PAIRS.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
@@ -308,7 +464,7 @@ export default function ChartsPage() {
             </select>
           </div>
           <div className="space-y-1">
-            <Label>Strategy levels</Label>
+            <Label>Strategy (required for AI assist)</Label>
             <select
               value={strategyId}
               onChange={(e) => setStrategyId(e.target.value)}
@@ -335,20 +491,177 @@ export default function ChartsPage() {
         </CardContent>
       </Card>
 
-      <div className="relative rounded-xl border border-brand-slate/60 overflow-hidden bg-brand-navy">
-        {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-brand-navy/60">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-cyan" />
-          </div>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ChartDrawingToolbar
+            tool={drawTool}
+            onTool={setDrawTool}
+            hasSelection={Boolean(selectedDrawingId)}
+            snapEnabled={snapEnabled}
+            onToggleSnap={setSnapEnabled}
+            onDeleteSelected={() => {
+              if (!selectedDrawingId) return
+              const target = drawings.find((d) => d.id === selectedDrawingId)
+              if (target?.locked) return
+              handleDrawingsChange(drawings.filter((d) => d.id !== selectedDrawingId))
+              setSelectedDrawingId(null)
+            }}
+            onClear={() => {
+              handleDrawingsChange(drawings.filter((d) => d.locked))
+              setSelectedDrawingId(null)
+            }}
+            onFullscreen={() => setIsChartFullscreen((v) => !v)}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={aiBusy || !strategyId}
+            onClick={() => runAiAnnotate(false)}
+            title={!strategyId ? "Select a strategy first" : "Annotate using your strategy"}
+          >
+            {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            AI annotate
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={aiBusy || !strategyId}
+            onClick={() => runAiAnnotate(true)}
+          >
+            Refresh AI
+          </Button>
+        </div>
+        {!strategyId && (
+          <p className="text-xs text-amber-400/90">
+            Select a strategy — AI chart assist always plots using your strategy rules and levels.
+          </p>
         )}
-        <div ref={containerRef} className="w-full" style={{ minHeight: 480 }} />
-        {bundle && (
-          <div className="absolute top-3 left-3 rounded-md bg-brand-navy/80 border border-brand-slate/50 px-2 py-1 text-xs text-slate-400">
-            {bundle.pair} · {bundle.timeframe} · {bundle.source}
-            {bundle.last ? ` · last ${bundle.last.close}` : ""}
-          </div>
-        )}
+        {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+        {syncNote && <p className="text-[10px] text-slate-500">{syncNote}</p>}
+        <div
+          className={
+            isChartFullscreen
+              ? "fixed inset-0 z-50 bg-brand-navy p-3 flex flex-col gap-2"
+              : "relative rounded-xl border border-brand-slate/60 overflow-hidden bg-brand-navy"
+          }
+        >
+          {isChartFullscreen && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={pair}
+                  onChange={(e) => setPair(e.target.value)}
+                  className="flex h-9 rounded-md border border-brand-slate bg-brand-navy-light/80 px-2 text-xs text-brand-silver"
+                >
+                  {FOREX_PAIRS.map((pr) => (
+                    <option key={pr} value={pr}>
+                      {pr}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={timeframe}
+                  onChange={(e) => setTimeframe(e.target.value)}
+                  className="flex h-9 rounded-md border border-brand-slate bg-brand-navy-light/80 px-2 text-xs text-brand-silver"
+                >
+                  {TIMEFRAMES.map((tf) => (
+                    <option key={tf} value={tf}>
+                      {tf}
+                    </option>
+                  ))}
+                </select>
+                <ChartDrawingToolbar
+                  tool={drawTool}
+                  onTool={setDrawTool}
+                  hasSelection={Boolean(selectedDrawingId)}
+                  snapEnabled={snapEnabled}
+                  onToggleSnap={setSnapEnabled}
+                  onDeleteSelected={() => {
+                    if (!selectedDrawingId) return
+                    const target = drawings.find((d) => d.id === selectedDrawingId)
+                    if (target?.locked) return
+                    handleDrawingsChange(drawings.filter((d) => d.id !== selectedDrawingId))
+                    setSelectedDrawingId(null)
+                  }}
+                  onClear={() => {
+                    handleDrawingsChange(drawings.filter((d) => d.locked))
+                    setSelectedDrawingId(null)
+                  }}
+                  onFullscreen={() => setIsChartFullscreen(false)}
+                />
+              </div>
+              <button
+                type="button"
+                className="rounded-md border border-brand-slate px-3 py-1 text-xs text-slate-300"
+                onClick={() => setIsChartFullscreen(false)}
+              >
+                Exit fullscreen
+              </button>
+            </div>
+          )}
+          {loading && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-brand-navy/60">
+              <Loader2 className="h-8 w-8 animate-spin text-brand-cyan" />
+            </div>
+          )}
+          <div ref={containerRef} className="w-full" style={{ minHeight: isChartFullscreen ? "calc(100vh - 80px)" : 480, height: isChartFullscreen ? "calc(100vh - 80px)" : undefined }} />
+          {drawingsReady && (
+            <ChartDrawingLayer
+              chartRef={chartRef}
+              seriesRef={seriesRef}
+              containerRef={containerRef}
+              candles={bundle?.candles || []}
+              drawings={drawings}
+              onChange={handleDrawingsChange}
+              tool={drawTool}
+              pair={pair}
+              timeframe={timeframe}
+              selectedId={selectedDrawingId}
+              setSelectedId={setSelectedDrawingId}
+              snapEnabled={snapEnabled}
+            />
+          )}
+          {bundle && (
+            <div className="absolute top-3 left-3 z-20 max-w-sm rounded-md bg-brand-navy/90 border border-brand-slate/50 px-2 py-1 text-xs text-slate-400 space-y-0.5">
+              <div>
+                {bundle.pair} · {bundle.timeframe} · {bundle.source}
+                {bundle.last ? ` · last ${bundle.last.close}` : ""}
+              </div>
+              {bundle.focusMarkup && (
+                <div className="text-brand-cyan">
+                  {bundle.focusMarkup.kind} focus · {bundle.focusMarkup.direction} · RR{" "}
+                  {bundle.focusMarkup.rr != null ? `1:${bundle.focusMarkup.rr}` : "—"}
+                  {bundle.focusMarkup.strategyName ? ` · ${bundle.focusMarkup.strategyName}` : ""}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Drawing layers</CardTitle>
+          <CardDescription>Select · lock · hide · reorder · server sync</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartDrawingLayers
+            drawings={drawings}
+            selectedId={selectedDrawingId}
+            onSelect={setSelectedDrawingId}
+            onToggleVisible={(id) => toggleDrawingFlag(id, "hidden")}
+            onToggleLock={(id) => toggleDrawingFlag(id, "locked")}
+            onDelete={(id) => {
+              const target = drawings.find((d) => d.id === id)
+              if (target?.locked) return
+              handleDrawingsChange(drawings.filter((d) => d.id !== id))
+              if (selectedDrawingId === id) setSelectedDrawingId(null)
+            }}
+            onReorder={reorderDrawing}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -419,6 +732,27 @@ export default function ChartsPage() {
         </Card>
       </div>
 
+      {bundle?.focusMarkup && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Focus {bundle.focusMarkup.kind} markup
+            </CardTitle>
+            <CardDescription>
+              {bundle.focusMarkup.strategyName || "Strategy"} · {bundle.focusMarkup.status}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-slate-300 grid gap-2 sm:grid-cols-3">
+            <p>Entry: {bundle.focusMarkup.entry ?? "—"}</p>
+            <p>SL: {bundle.focusMarkup.stopLoss ?? "—"}</p>
+            <p>TP: {bundle.focusMarkup.takeProfit ?? "—"}</p>
+            <p>Direction: {bundle.focusMarkup.direction ?? "—"}</p>
+            <p>RR: {bundle.focusMarkup.rr != null ? `1:${bundle.focusMarkup.rr}` : "—"}</p>
+            <p>Outcome: {bundle.focusMarkup.outcome || "—"}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {bundle?.strategyLevels && (
         <Card>
           <CardHeader>
@@ -435,8 +769,7 @@ export default function ChartsPage() {
       )}
 
       <p className="text-xs text-slate-600">
-        OHLC source is synthetic (stable, seeded) until MARKET_DATA_URL / broker stream is configured.
-        Overlays and news markers are live from your trades and news filter engine.
+        Market data · live provider with fallback when keys are missing.
       </p>
     </div>
   )

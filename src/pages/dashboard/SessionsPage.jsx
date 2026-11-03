@@ -1,35 +1,94 @@
 import { useEffect, useState } from "react"
 import { Clock, Loader2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ToggleSwitch } from "@/components/ui/toggle-switch"
 import { MarketStatusBadge } from "@/components/layout/MarketStatusBadge"
 import { strategiesApi } from "@/api/strategies"
 import { accountConfigApi } from "@/api/trading"
+import { FOREX_PAIRS } from "@/lib/forexPairs"
 
 const SESSION_OPTS = [
   { id: "london", label: "London" },
   { id: "newyork", label: "New York" },
   { id: "tokyo", label: "Tokyo / Asia" },
-  { id: "sydney", label: "Sydney / Australia" },
+  { id: "sydney", label: "Sydney" },
 ]
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+const DAYS = [
+  ["monday", "Mon"],
+  ["tuesday", "Tue"],
+  ["wednesday", "Wed"],
+  ["thursday", "Thu"],
+  ["friday", "Fri"],
+  ["saturday", "Sat"],
+  ["sunday", "Sun"],
+]
+
+const DEFAULT_CONFIG = {
+  type: "demo",
+  sessions: ["london", "newyork", "tokyo", "sydney"],
+  tradeFrequency: {
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+    sunday: false,
+  },
+  maxTradesPerWeek: null,
+  oneSignalPerSession: true,
+  allowMultipleSessions: true,
+  tradeDirection: "long_short",
+  allowedPairs: [],
+  onlySignals: false,
+  propFirmLimits: {
+    maxDailyDD: 5,
+    maxWeeklyDD: 10,
+    maxOpenRisk: 2,
+    maxConsecutiveLosses: 3,
+    dailyLossCap: 3,
+    weeklyLossCap: 6,
+  },
+}
+
+const DEFAULT_RISK = {
+  enabled: false,
+  trendAlignment: false,
+  newsImpactCheck: false,
+  profitLock50: { enabled: false, activationLevel: 50 },
+  drawdownGuard: true,
+  capitalGuard: true,
+}
+
+function normalizeConfig(raw) {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_CONFIG }
+  return {
+    ...DEFAULT_CONFIG,
+    ...raw,
+    sessions: Array.isArray(raw.sessions) ? raw.sessions : DEFAULT_CONFIG.sessions,
+    tradeFrequency: {
+      ...DEFAULT_CONFIG.tradeFrequency,
+      ...(raw.tradeFrequency || {}),
+    },
+    propFirmLimits: {
+      ...DEFAULT_CONFIG.propFirmLimits,
+      ...(raw.propFirmLimits || {}),
+    },
+    allowedPairs: Array.isArray(raw.allowedPairs) ? raw.allowedPairs : [],
+  }
+}
 
 export default function SessionsPage() {
   const [strategies, setStrategies] = useState([])
   const [strategyId, setStrategyId] = useState("")
   const [config, setConfig] = useState(null)
-  const [riskAdj, setRiskAdj] = useState({
-    enabled: false,
-    trendAlignment: false,
-    newsImpactCheck: false,
-    profitLock50: { enabled: false, activationLevel: 50 },
-    drawdownGuard: true,
-    capitalGuard: true,
-  })
+  const [riskAdj, setRiskAdj] = useState(DEFAULT_RISK)
   const [loading, setLoading] = useState(true)
+  const [loadingConfig, setLoadingConfig] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -39,8 +98,9 @@ export default function SessionsPage() {
     ;(async () => {
       try {
         const data = await strategiesApi.list()
-        setStrategies(data.strategies || [])
-        if (data.strategies?.[0]) setStrategyId(data.strategies[0]._id)
+        const list = data.strategies || []
+        setStrategies(list)
+        if (list[0]?._id) setStrategyId(list[0]._id)
       } catch (err) {
         setError(err?.response?.data?.message || "Failed to load strategies")
       } finally {
@@ -50,34 +110,55 @@ export default function SessionsPage() {
   }, [])
 
   useEffect(() => {
-    if (!strategyId) return
+    if (!strategyId) {
+      setConfig(null)
+      return
+    }
+    let cancelled = false
     ;(async () => {
+      setLoadingConfig(true)
       setError("")
       try {
         const data = await accountConfigApi.getForStrategy(strategyId)
-        setConfig(data.config)
-        const st = await strategiesApi.get(strategyId)
-        if (st.strategy?.riskAdjustment) {
-          setRiskAdj({
-            enabled: !!st.strategy.riskAdjustment.enabled,
-            trendAlignment: !!st.strategy.riskAdjustment.trendAlignment,
-            newsImpactCheck: !!st.strategy.riskAdjustment.newsImpactCheck,
-            profitLock50: {
-              enabled: !!st.strategy.riskAdjustment.profitLock50?.enabled,
-              activationLevel: st.strategy.riskAdjustment.profitLock50?.activationLevel || 50,
-            },
-            drawdownGuard: st.strategy.riskAdjustment.drawdownGuard !== false,
-            capitalGuard: st.strategy.riskAdjustment.capitalGuard !== false,
-          })
+        if (cancelled) return
+        setConfig(normalizeConfig(data.config))
+        try {
+          const st = await strategiesApi.get(strategyId)
+          const ra = st.strategy?.riskAdjustment
+          if (ra) {
+            setRiskAdj({
+              enabled: !!ra.enabled,
+              trendAlignment: !!ra.trendAlignment,
+              newsImpactCheck: !!ra.newsImpactCheck,
+              profitLock50: {
+                enabled: !!ra.profitLock50?.enabled,
+                activationLevel: ra.profitLock50?.activationLevel || 50,
+              },
+              drawdownGuard: ra.drawdownGuard !== false,
+              capitalGuard: ra.capitalGuard !== false,
+            })
+          } else {
+            setRiskAdj(DEFAULT_RISK)
+          }
+        } catch {
+          setRiskAdj(DEFAULT_RISK)
         }
       } catch (err) {
-        setError(err?.response?.data?.message || "Failed to load config")
+        if (cancelled) return
+        setError(err?.response?.data?.message || "Failed to load config — showing defaults")
+        setConfig(normalizeConfig(null))
+      } finally {
+        if (!cancelled) setLoadingConfig(false)
       }
     })()
+    return () => {
+      cancelled = true
+    }
   }, [strategyId])
 
   const toggleSession = (id) => {
     setConfig((c) => {
+      if (!c) return c
       const sessions = c.sessions || []
       const next = sessions.includes(id)
         ? sessions.filter((s) => s !== id)
@@ -87,13 +168,16 @@ export default function SessionsPage() {
   }
 
   const toggleDay = (day) => {
-    setConfig((c) => ({
-      ...c,
-      tradeFrequency: {
-        ...c.tradeFrequency,
-        [day]: !c.tradeFrequency?.[day],
-      },
-    }))
+    setConfig((c) => {
+      if (!c) return c
+      return {
+        ...c,
+        tradeFrequency: {
+          ...c.tradeFrequency,
+          [day]: !c.tradeFrequency?.[day],
+        },
+      }
+    })
   }
 
   const save = async () => {
@@ -115,7 +199,7 @@ export default function SessionsPage() {
         propFirmLimits: config.propFirmLimits,
       })
       await accountConfigApi.saveRiskAdjustment(strategyId, riskAdj)
-      setSuccess("Session, account, and risk-adjustment settings saved")
+      setSuccess("Session settings saved")
     } catch (err) {
       setError(err?.response?.data?.message || "Save failed")
     } finally {
@@ -124,7 +208,7 @@ export default function SessionsPage() {
   }
 
   const addPair = () => {
-    const p = pairInput.trim().toUpperCase()
+    const p = pairInput.trim().toUpperCase().replace(/[^A-Z]/g, "")
     if (!p) return
     setConfig((c) => ({
       ...c,
@@ -150,7 +234,7 @@ export default function SessionsPage() {
             Sessions & Constraints
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Per-strategy session filters, direction, prop limits, only-signals mode
+            Session hours, trade days, pairs, and risk switches for the selected strategy
           </p>
         </div>
         <MarketStatusBadge />
@@ -174,13 +258,25 @@ export default function SessionsPage() {
           onChange={(e) => setStrategyId(e.target.value)}
           className="flex h-11 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
         >
+          <option value="">Select a strategy</option>
           {strategies.map((s) => (
             <option key={s._id} value={s._id}>
               {s.name} ({s.status})
             </option>
           ))}
         </select>
+        {!strategies.length && (
+          <p className="text-sm text-slate-500">
+            Create a strategy first, then return here to set sessions.
+          </p>
+        )}
       </div>
+
+      {loadingConfig && (
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading settings…
+        </div>
+      )}
 
       {config && (
         <>
@@ -197,7 +293,7 @@ export default function SessionsPage() {
                   className={`rounded-full px-4 py-2 text-sm border transition-all ${
                     (config.sessions || []).includes(s.id)
                       ? "border-brand-cyan bg-brand-cyan/15 text-brand-cyan"
-                      : "border-brand-slate text-slate-400"
+                      : "border-brand-slate/60 text-slate-400 hover:border-brand-slate"
                   }`}
                 >
                   {s.label}
@@ -211,18 +307,18 @@ export default function SessionsPage() {
               <CardTitle>Trade frequency</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {DAYS.map((d) => (
+              {DAYS.map(([key, label]) => (
                 <button
-                  key={d}
+                  key={key}
                   type="button"
-                  onClick={() => toggleDay(d)}
-                  className={`rounded-lg px-3 py-2 text-xs capitalize border ${
-                    config.tradeFrequency?.[d]
-                      ? "border-brand-gold bg-brand-gold/10 text-brand-gold"
-                      : "border-brand-slate text-slate-500"
+                  onClick={() => toggleDay(key)}
+                  className={`rounded-full px-3 py-2 text-sm border ${
+                    config.tradeFrequency?.[key]
+                      ? "border-brand-gold bg-brand-gold/15 text-brand-gold"
+                      : "border-brand-slate/60 text-slate-500"
                   }`}
                 >
-                  {d.slice(0, 3)}
+                  {label}
                 </button>
               ))}
             </CardContent>
@@ -233,7 +329,7 @@ export default function SessionsPage() {
               <CardTitle>Limits & direction</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label>Account type</Label>
                 <select
                   value={config.type}
@@ -245,20 +341,20 @@ export default function SessionsPage() {
                   <option value="prop_firm">Prop firm</option>
                 </select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label>Direction</Label>
                 <select
                   value={config.tradeDirection}
                   onChange={(e) => setConfig((c) => ({ ...c, tradeDirection: e.target.value }))}
                   className="flex h-11 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
                 >
-                  <option value="long_short">Long & Short</option>
+                  <option value="long_short">Long & short</option>
                   <option value="long">Long only</option>
                   <option value="short">Short only</option>
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label>Max trades / week (empty = unlimited)</Label>
+              <div className="space-y-1">
+                <Label>Max trades / week</Label>
                 <Input
                   type="number"
                   value={config.maxTradesPerWeek ?? ""}
@@ -268,29 +364,29 @@ export default function SessionsPage() {
                       maxTradesPerWeek: e.target.value === "" ? null : Number(e.target.value),
                     }))
                   }
+                  placeholder="Unlimited"
                 />
               </div>
-              <div className="space-y-2 flex flex-col justify-end gap-2">
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={!!config.oneSignalPerSession}
-                    onChange={(e) =>
-                      setConfig((c) => ({ ...c, oneSignalPerSession: e.target.checked }))
-                    }
-                  />
-                  One signal per session
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={!!config.onlySignals}
-                    onChange={(e) =>
-                      setConfig((c) => ({ ...c, onlySignals: e.target.checked }))
-                    }
-                  />
-                  Only generate signals (no trades)
-                </label>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-slate/40 px-3 py-2">
+                <span className="text-sm text-slate-300">One signal per session</span>
+                <ToggleSwitch
+                  checked={!!config.oneSignalPerSession}
+                  onChange={(v) => setConfig((c) => ({ ...c, oneSignalPerSession: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-slate/40 px-3 py-2">
+                <span className="text-sm text-slate-300">Allow multiple sessions</span>
+                <ToggleSwitch
+                  checked={!!config.allowMultipleSessions}
+                  onChange={(v) => setConfig((c) => ({ ...c, allowMultipleSessions: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-slate/40 px-3 py-2">
+                <span className="text-sm text-slate-300">Signals only (no auto-open)</span>
+                <ToggleSwitch
+                  checked={!!config.onlySignals}
+                  onChange={(v) => setConfig((c) => ({ ...c, onlySignals: v }))}
+                />
               </div>
             </CardContent>
           </Card>
@@ -298,35 +394,45 @@ export default function SessionsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Allowed pairs</CardTitle>
-              <CardDescription>Leave empty for AI / manual any-pair</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {(config.allowedPairs || []).length === 0 ? (
+                  <p className="text-sm text-slate-500">All pairs allowed</p>
+                ) : (
+                  config.allowedPairs.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="rounded-full border border-brand-slate px-3 py-1 text-xs text-slate-300"
+                      onClick={() =>
+                        setConfig((c) => ({
+                          ...c,
+                          allowedPairs: c.allowedPairs.filter((x) => x !== p),
+                        }))
+                      }
+                    >
+                      {p} ×
+                    </button>
+                  ))
+                )}
+              </div>
               <div className="flex gap-2">
-                <Input
+                <select
                   value={pairInput}
                   onChange={(e) => setPairInput(e.target.value)}
-                  placeholder="EURUSD"
-                />
-                <Button type="button" variant="outline" onClick={addPair}>
+                  className="flex h-11 flex-1 rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
+                >
+                  <option value="">Select pair</option>
+                  {FOREX_PAIRS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+                <Button type="button" variant="secondary" onClick={addPair}>
                   Add
                 </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(config.allowedPairs || []).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className="rounded-full border border-brand-slate px-3 py-1 text-xs text-slate-300"
-                    onClick={() =>
-                      setConfig((c) => ({
-                        ...c,
-                        allowedPairs: c.allowedPairs.filter((x) => x !== p),
-                      }))
-                    }
-                  >
-                    {p} ×
-                  </button>
-                ))}
               </div>
             </CardContent>
           </Card>
@@ -336,83 +442,68 @@ export default function SessionsPage() {
               <CardHeader>
                 <CardTitle>Prop firm limits</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-3">
-                {["maxDailyDD", "maxWeeklyDD", "maxOpenRisk", "maxConsecutiveLosses", "dailyLossCap", "weeklyLossCap"].map(
-                  (k) => (
-                    <div key={k} className="space-y-1">
-                      <Label className="text-xs">{k}</Label>
-                      <Input
-                        type="number"
-                        value={config.propFirmLimits?.[k] ?? ""}
-                        onChange={(e) =>
-                          setConfig((c) => ({
-                            ...c,
-                            propFirmLimits: {
-                              ...c.propFirmLimits,
-                              [k]: Number(e.target.value),
-                            },
-                          }))
-                        }
-                      />
-                    </div>
-                  )
-                )}
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                {Object.keys(DEFAULT_CONFIG.propFirmLimits).map((k) => (
+                  <div key={k} className="space-y-1">
+                    <Label>{k}</Label>
+                    <Input
+                      type="number"
+                      value={config.propFirmLimits?.[k] ?? ""}
+                      onChange={(e) =>
+                        setConfig((c) => ({
+                          ...c,
+                          propFirmLimits: {
+                            ...c.propFirmLimits,
+                            [k]: Number(e.target.value),
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
 
-          <Card className="border-amber-500/20">
+          <Card>
             <CardHeader>
-              <CardTitle>Risk adjustment (default OFF)</CardTitle>
-              <CardDescription>
-                Only runs when enabled AND news filter is disabled. Single adjustment per trade.
-              </CardDescription>
+              <CardTitle>Risk adjustment</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm text-slate-300">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={riskAdj.enabled}
-                  onChange={(e) => setRiskAdj((r) => ({ ...r, enabled: e.target.checked }))}
-                />
-                Enable risk adjustment engine
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={riskAdj.trendAlignment}
-                  onChange={(e) => setRiskAdj((r) => ({ ...r, trendAlignment: e.target.checked }))}
-                  disabled={!riskAdj.enabled}
-                />
-                Trend-aligned SL
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={riskAdj.newsImpactCheck}
-                  onChange={(e) => setRiskAdj((r) => ({ ...r, newsImpactCheck: e.target.checked }))}
-                  disabled={!riskAdj.enabled}
-                />
-                News impact estimation before SL move
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={riskAdj.profitLock50.enabled}
-                  onChange={(e) =>
+            <CardContent className="space-y-3">
+              {[
+                ["enabled", "Enable risk adjustment"],
+                ["trendAlignment", "Trend alignment"],
+                ["newsImpactCheck", "News impact check"],
+                ["drawdownGuard", "Drawdown guard"],
+                ["capitalGuard", "Capital guard"],
+              ].map(([key, label]) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-brand-slate/40 px-3 py-2"
+                >
+                  <span className="text-sm text-slate-300">{label}</span>
+                  <ToggleSwitch
+                    checked={!!riskAdj[key]}
+                    onChange={(v) => setRiskAdj((r) => ({ ...r, [key]: v }))}
+                  />
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-slate/40 px-3 py-2">
+                <span className="text-sm text-slate-300">Profit lock 50%</span>
+                <ToggleSwitch
+                  checked={!!riskAdj.profitLock50?.enabled}
+                  onChange={(v) =>
                     setRiskAdj((r) => ({
                       ...r,
-                      profitLock50: { ...r.profitLock50, enabled: e.target.checked },
+                      profitLock50: { ...r.profitLock50, enabled: v },
                     }))
                   }
-                  disabled={!riskAdj.enabled}
                 />
-                Profit lock at 50%+
-              </label>
+              </div>
             </CardContent>
           </Card>
 
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={save} disabled={saving || !strategyId}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save settings
           </Button>

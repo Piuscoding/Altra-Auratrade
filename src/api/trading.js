@@ -37,14 +37,6 @@ export const tradingApi = {
     const { data } = await api.get("/trading/news/upcoming")
     return data
   },
-  seedDemoNews: async (payload) => {
-    const { data } = await api.post("/trading/news/demo-seed", payload)
-    return data
-  },
-  clearDemoNews: async () => {
-    const { data } = await api.delete("/trading/news/demo")
-    return data
-  },
 }
 
 export const accountConfigApi = {
@@ -69,6 +61,10 @@ export const accountConfigApi = {
       `/account-config/strategy/${strategyId}/risk-adjustment`,
       payload
     )
+    return data
+  },
+  syncTradeStatus: async (id) => {
+    const { data } = await api.post(`/trading/trades/${id}/sync-status`)
     return data
   },
 }

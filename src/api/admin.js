@@ -17,6 +17,14 @@ export const adminApi = {
     const { data } = await api.patch("/admin/settings/model-switching", payload)
     return data
   },
+  updateDataProviders: async (payload) => {
+    const { data } = await api.patch("/admin/settings/data-providers", payload)
+    return data
+  },
+  updateDefaultModels: async (payload) => {
+    const { data } = await api.patch("/admin/settings/default-models", payload)
+    return data
+  },
   users: async (q) => {
     const { data } = await api.get("/admin/users", { params: q ? { q } : {} })
     return data
@@ -45,6 +53,14 @@ export const adminApi = {
   },
   bestStrategies: async () => {
     const { data } = await api.get("/admin/best-strategies")
+    return data
+  },
+  updatePreSignal: async (payload) => {
+    const { data } = await api.patch("/admin/settings/pre-signal-validation", payload)
+    return data
+  },
+  updateAiChart: async (payload) => {
+    const { data } = await api.patch("/admin/settings/ai-chart-assist", payload)
     return data
   },
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import {
   Terminal,
   Loader2,
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MarketStatusBadge } from "@/components/layout/MarketStatusBadge"
 import { tradingApi } from "@/api/trading"
+import { FOREX_PAIRS, isSelectableStrategy } from "@/lib/forexPairs"
 import { strategiesApi } from "@/api/strategies"
 
 export default function TerminalPage() {
@@ -43,9 +45,7 @@ export default function TerminalPage() {
       ])
       setTrades(t.trades || [])
       setSignals(s.signals || [])
-      const approved = (st.strategies || []).filter((x) =>
-        ["approved", "demo", "live"].includes(x.status)
-      )
+      const approved = (st.strategies || []).filter(isSelectableStrategy)
       setStrategies(approved)
       if (!form.strategyId && approved[0]) {
         setForm((f) => ({ ...f, strategyId: approved[0]._id }))
@@ -98,6 +98,24 @@ export default function TerminalPage() {
       await load()
     } catch (err) {
       setError(err?.response?.data?.message || "Kill switch failed")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const syncStatus = async (id) => {
+    setBusy(true)
+    setError("")
+    try {
+      const data = await tradingApi.syncTradeStatus(id)
+      setSuccess(
+        data.fillState
+          ? `Order ${data.orderStatus || data.fillState}`
+          : "Status synced"
+      )
+      await load()
+    } catch (err) {
+      setError(err?.response?.data?.message || "Status sync failed")
     } finally {
       setBusy(false)
     }
@@ -157,8 +175,7 @@ export default function TerminalPage() {
             <Terminal className="h-7 w-7 text-brand-gold" />
             Live Terminal
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Signal pipeline · news → session → risk · paper execution until Phase 6 brokers
+          <p className="text-sm text-slate-400 mt-1">Manual signals and live execution. Auto-signal is on each strategy Review page.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -198,7 +215,7 @@ export default function TerminalPage() {
                 required
                 className="flex h-11 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
               >
-                <option value="">Select approved strategy</option>
+                <option value="">Select strategy</option>
                 {strategies.map((s) => (
                   <option key={s._id} value={s._id}>
                     {s.name} ({s.status})
@@ -208,11 +225,16 @@ export default function TerminalPage() {
             </div>
             <div className="space-y-2">
               <Label>Pair</Label>
-              <Input
+              <select
                 value={form.pair}
-                onChange={(e) => setForm((f) => ({ ...f, pair: e.target.value.toUpperCase() }))}
+                onChange={(e) => setForm((f) => ({ ...f, pair: e.target.value }))}
                 required
-              />
+                className="flex h-11 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
+              >
+                {FOREX_PAIRS.map((pr) => (
+                  <option key={pr} value={pr}>{pr}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label>Direction</Label>
@@ -277,7 +299,27 @@ export default function TerminalPage() {
               >
                 <div>
                   <p className="font-medium text-white">
-                    {t.pair} {t.direction} · <span className="text-slate-400">{t.status}</span>
+                    {t.pair} {t.direction} ·{" "}
+                    <span className="text-slate-400">{t.status}</span>
+                    {t.status === "closed" && (
+                      <span
+                        className={`ml-2 text-[10px] uppercase ${
+                          (t.pnl || 0) > 0
+                            ? "text-emerald-400"
+                            : (t.pnl || 0) < 0
+                              ? "text-red-400"
+                              : "text-slate-500"
+                        }`}
+                      >
+                        {(t.pnl || 0) > 0 ? "win" : (t.pnl || 0) < 0 ? "loss" : "flat"}
+                      </span>
+                    )}
+                    <Link
+                      to={`/dashboard/charts?pair=${encodeURIComponent(t.pair || "EURUSD")}&strategyId=${t.strategyId || ""}&tradeId=${t._id}`}
+                      className="ml-2 text-xs text-brand-cyan hover:underline"
+                    >
+                      Chart
+                    </Link>
                   </p>
                   <p className="text-xs text-slate-500">
                     Session: {t.session || "—"} · SL: {t.stopLoss ?? "—"} · TP: {t.takeProfit ?? "—"}
@@ -305,6 +347,11 @@ export default function TerminalPage() {
                       Suggest SL adjust
                     </Button>
                   )}
+                  {["open", "pending"].includes(t.status) && t.brokerAccountId && (
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => syncStatus(t._id)}>
+                      Sync status
+                    </Button>
+                  )}
                 </div>
               </div>
             ))
@@ -318,9 +365,20 @@ export default function TerminalPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           {signals.slice(0, 15).map((s) => (
-            <div key={s._id} className="text-sm text-slate-400 border-b border-brand-slate/30 py-2">
-              <span className="text-white">{s.pair}</span> {s.direction} · {s.status}
-              {s.rejectReason ? ` — ${s.rejectReason}` : ""}
+            <div
+              key={s._id}
+              className="flex items-center justify-between gap-2 text-sm text-slate-400 border-b border-brand-slate/30 py-2"
+            >
+              <div>
+                <span className="text-white">{s.pair}</span> {s.direction} · {s.status}
+                {s.rejectReason ? ` — ${s.rejectReason}` : ""}
+              </div>
+              <Link
+                to={`/dashboard/charts?pair=${encodeURIComponent(s.pair || "EURUSD")}&strategyId=${s.strategyId || ""}&signalId=${s._id}`}
+                className="shrink-0 text-xs text-brand-cyan hover:underline"
+              >
+                View chart
+              </Link>
             </div>
           ))}
         </CardContent>

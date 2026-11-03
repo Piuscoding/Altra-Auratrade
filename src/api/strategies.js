@@ -56,4 +56,24 @@ export const strategiesApi = {
     const { data } = await api.get("/strategies/meta/step-templates")
     return data
   },
+  updateMetricsTargets: async (id, payload) => {
+    const { data } = await api.patch(`/strategies/${id}/metrics-targets`, payload)
+    return data
+  },
+  recomputeDemoMetrics: async (id) => {
+    const { data } = await api.post(`/strategies/${id}/recompute-demo-metrics`)
+    return data
+  },
+  updateAutoSignal: async (id, payload) => {
+    const { data } = await api.patch(`/strategies/${id}/auto-signal`, payload)
+    return data
+  },
+  runAutoSignal: async (id) => {
+    const { data } = await api.post(`/strategies/${id}/auto-signal/run`)
+    return data
+  },
+  autoSignalHealth: async (id) => {
+    const { data } = await api.get(`/strategies/${id}/auto-signal/health`)
+    return data
+  },
 }
