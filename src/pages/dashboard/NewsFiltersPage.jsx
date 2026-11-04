@@ -56,9 +56,7 @@ export default function NewsFiltersPage() {
             <Newspaper className="h-7 w-7 text-rose-400" />
             News Filters
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Live economic calendar · blocks new signals near high-impact releases
-          </p>
+          <p className="text-sm text-slate-400 mt-1">Upcoming events and how they affect your signals.</p>
         </div>
         <div className="flex items-center gap-2">
           <MarketStatusBadge />
@@ -71,11 +69,9 @@ export default function NewsFiltersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>How news filtering works</CardTitle>
+          <CardTitle>News filtering</CardTitle>
           <CardDescription>
-            When enabled on a broker account, the trading engine checks the live calendar before
-            accepting a signal. If a high-impact event falls inside the blackout window, the signal is
-            skipped (not sent to the broker). You can customize watched events per account from Brokers.
+            When enabled on a broker account, high-impact events can block new signals inside your chosen window.
           </CardDescription>
         </CardHeader>
         <CardContent className="text-sm text-slate-400 space-y-1">
@@ -106,7 +102,7 @@ export default function NewsFiltersPage() {
             </div>
           ) : !events.length ? (
             <p className="text-sm text-slate-500">
-              No events returned. Set FINANCECALENDAR_API_KEY and/or JBNEWS_API_KEY on the API server, then choose the provider in Admin → Settings.
+              No calendar events right now. If this persists, ask your admin to check news data providers.
             </p>
           ) : (
             events.map((e) => (
@@ -148,7 +144,7 @@ export default function NewsFiltersPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           {!accounts.length ? (
-            <p className="text-sm text-slate-500">No broker accounts yet</p>
+            <p className="text-sm text-slate-500">No broker accounts yet — add one under Brokers to attach news filters.</p>
           ) : (
             accounts.map((acc) => (
               <div

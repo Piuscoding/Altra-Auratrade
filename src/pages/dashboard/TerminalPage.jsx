@@ -175,7 +175,7 @@ export default function TerminalPage() {
             <Terminal className="h-7 w-7 text-brand-gold" />
             Live Terminal
           </h1>
-          <p className="text-sm text-slate-400 mt-1">Manual signals and live execution. Auto-signal is on each strategy Review page.
+          <p className="text-sm text-slate-400 mt-1">Generate and manage trades. Enable auto-signal from a strategy’s Review page when you are ready.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -202,7 +202,7 @@ export default function TerminalPage() {
         <CardHeader>
           <CardTitle>Generate signal</CardTitle>
           <CardDescription>
-            Strategy must be approved / demo / live. Pipeline runs news filter, session constraints, then risk.
+            Choose an approved strategy. Signals respect your news, session, and risk settings.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -290,7 +290,9 @@ export default function TerminalPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {trades.length === 0 ? (
-            <p className="text-sm text-slate-500">No trades yet</p>
+            <p className="text-sm text-slate-500 text-center py-6">
+              No trades yet. Generate a signal above when your strategy is approved.
+            </p>
           ) : (
             trades.map((t) => (
               <div
@@ -364,7 +366,10 @@ export default function TerminalPage() {
           <CardTitle>Recent signals</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {signals.slice(0, 15).map((s) => (
+          {!signals.length ? (
+            <p className="text-sm text-slate-500 text-center py-4">No signals yet</p>
+          ) : (
+          signals.slice(0, 15).map((s) => (
             <div
               key={s._id}
               className="flex items-center justify-between gap-2 text-sm text-slate-400 border-b border-brand-slate/30 py-2"
@@ -380,7 +385,8 @@ export default function TerminalPage() {
                 View chart
               </Link>
             </div>
-          ))}
+          ))
+          )}
         </CardContent>
       </Card>
     </div>

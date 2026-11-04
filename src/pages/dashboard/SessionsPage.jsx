@@ -234,7 +234,7 @@ export default function SessionsPage() {
             Sessions & Constraints
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Session hours, trade days, pairs, and risk switches for the selected strategy
+            Choose a strategy, then set sessions, trade days, pairs, and risk controls.
           </p>
         </div>
         <MarketStatusBadge />
@@ -258,7 +258,7 @@ export default function SessionsPage() {
           onChange={(e) => setStrategyId(e.target.value)}
           className="flex h-11 w-full rounded-lg border border-brand-slate bg-brand-navy-light/80 px-4 text-sm text-brand-silver"
         >
-          <option value="">Select a strategy</option>
+          <option value="">Select a strategy to configure</option>
           {strategies.map((s) => (
             <option key={s._id} value={s._id}>
               {s.name} ({s.status})
@@ -267,7 +267,7 @@ export default function SessionsPage() {
         </select>
         {!strategies.length && (
           <p className="text-sm text-slate-500">
-            Create a strategy first, then return here to set sessions.
+            Create a strategy first from Strategies, then set sessions here.
           </p>
         )}
       </div>

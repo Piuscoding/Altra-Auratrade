@@ -64,9 +64,7 @@ export default function AnalyticsPage() {
             <BarChart3 className="h-7 w-7 text-brand-cyan" />
             Performance Analytics
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Expectancy-focused overview from your strategies, signals, and trades
-          </p>
+          <p className="text-sm text-slate-400 mt-1">Performance overview across strategies and trades.</p>
         </div>
         <MarketStatusBadge />
       </div>
@@ -100,7 +98,7 @@ export default function AnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Strategies</CardTitle>
-          <CardDescription>Status, confidence, and recorded performance fields</CardDescription>
+          <CardDescription>Strategy status and performance summary</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {!strategies.length ? (
@@ -135,7 +133,7 @@ export default function AnalyticsPage() {
         </CardHeader>
         <CardContent className="space-y-2 max-h-80 overflow-y-auto">
           {!trades.length ? (
-            <p className="text-sm text-slate-500">No trades yet — use the Terminal after approving a strategy</p>
+            <p className="text-sm text-slate-500">No trades yet. Approve a strategy and use Terminal to start.</p>
           ) : (
             trades.slice(0, 30).map((t) => (
               <div

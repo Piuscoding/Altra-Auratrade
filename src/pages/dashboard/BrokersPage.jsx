@@ -201,9 +201,7 @@ export default function BrokersPage() {
             <Link2 className="h-7 w-7 text-brand-cyan" />
             Broker Connections
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            MetaApi · OANDA · IBKR · one strategy per account
-          </p>
+          <p className="text-sm text-slate-400 mt-1">Connect accounts, assign one strategy per account, and sync balances.</p>
         </div>
         <div className="flex items-center gap-3">
           <MarketStatusBadge />
@@ -283,7 +281,7 @@ export default function BrokersPage() {
               )}
               {form.type !== "demo" && (
                 <p className="text-xs text-slate-500 sm:col-span-2">
-                  Live / prop balance is pulled automatically after a successful broker connection and Sync.
+                  Balances update after you connect and use Sync.
                 </p>
               )}
 
@@ -384,7 +382,7 @@ export default function BrokersPage() {
       {accounts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-slate-400">
-            No broker accounts yet. Add a MetaApi, OANDA, or IBKR account to start.
+            No accounts yet. Add a demo or live broker connection to trade.
           </CardContent>
         </Card>
       ) : (

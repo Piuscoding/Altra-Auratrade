@@ -35,7 +35,7 @@ export default function DashboardHome() {
           <h1 className="text-2xl sm:text-3xl font-bold text-white">
             Welcome back, {user?.firstName || "Trader"}
           </h1>
-          <p className="mt-1 text-slate-400">Your AI-assisted trading command center</p>
+          <p className="mt-1 text-slate-400">Overview of strategies, trades, and market status</p>
         </div>
         <MarketStatusBadge />
       </div>

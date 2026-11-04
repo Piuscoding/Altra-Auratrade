@@ -241,7 +241,7 @@ export default function StrategyReviewPage() {
               <CardTitle className="text-base">Performance targets (RR / WR)</CardTitle>
               <CardDescription>
                 Designated RR is used in backtests and as the default for future auto-signals.
-                Empirical mode uses the high-probability RR from backtest or demo data.
+                Empirical mode prefers the RR your strategy has realized most often in testing.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
@@ -297,7 +297,18 @@ export default function StrategyReviewPage() {
               <div className="sm:col-span-3">
                 <StrategyMetricsPanel strategy={strategy} />
               <div className="sm:col-span-3 mt-4">
-                <AutoSignalControls strategy={strategy} onUpdated={setStrategy} />
+                <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Automatic signals</CardTitle>
+            <CardDescription>
+              When enabled, the system evaluates this strategy on a schedule and runs the same safety
+              checks as the Terminal.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AutoSignalControls strategy={strategy} onUpdated={setStrategy} />
+          </CardContent>
+        </Card>
               </div>
               </div>
             </CardContent>

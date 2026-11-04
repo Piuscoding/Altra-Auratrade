@@ -150,7 +150,7 @@ export default function BacktestPage() {
           <CardTitle>Run backtest</CardTitle>
           <CardDescription>
             Uses strategy direction / min RR rules on OHLC series. Promote only when expectancy and
-            drawdown meet your gates (demo-first).
+            drawdown meet your promotion gates before going live.
           </CardDescription>
         </CardHeader>
         <CardContent>

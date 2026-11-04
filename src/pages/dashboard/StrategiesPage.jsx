@@ -130,9 +130,7 @@ export default function StrategiesPage() {
             <BrainCircuit className="h-7 w-7 text-brand-cyan" />
             Strategy Creation
           </h1>
-          <p className="mt-1 text-slate-400">
-            4-step guided builder · Visual · Hybrid · Video-Only
-          </p>
+          <p className="mt-1 text-slate-400">Build, review, and assign strategies. Open Review to enable auto-signal.</p>
         </div>
         <div className="flex items-center gap-3">
           <MarketStatusBadge />
@@ -239,7 +237,10 @@ export default function StrategiesPage() {
         <Card>
           <CardContent className="py-16 text-center text-slate-400">
             <BrainCircuit className="h-12 w-12 mx-auto mb-4 text-brand-slate" />
-            <p>No strategies yet. Create your first 4-step strategy.</p>
+            <div className="text-center py-10 space-y-3">
+              <p className="text-slate-400">No strategies yet</p>
+              <p className="text-sm text-slate-500">Create a strategy to analyze charts and generate signals.</p>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -257,6 +258,11 @@ export default function StrategiesPage() {
                     >
                       {s.status}
                     </span>
+                    {s.autoSignal?.enabled ? (
+                      <span className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[10px] text-brand-cyan">
+                        Auto-signal on
+                      </span>
+                    ) : null}
                     <span className="text-xs text-slate-500">
                       {SOURCE_LABELS[s.sourceType] || s.sourceType}
                     </span>
@@ -282,7 +288,7 @@ export default function StrategiesPage() {
                       variant="secondary"
                       onClick={() => navigate(`/dashboard/strategies/${s._id}/review`)}
                     >
-                      Analysis & Review
+                      Review
                     </Button>
                   )}
                   {s.status === "disabled" ? (

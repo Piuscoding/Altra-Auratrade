@@ -533,7 +533,7 @@ export default function ChartsPage() {
         </div>
         {!strategyId && (
           <p className="text-xs text-amber-400/90">
-            Select a strategy — AI chart assist always plots using your strategy rules and levels.
+            Select a strategy to run AI chart assist.
           </p>
         )}
         {aiError && <p className="text-xs text-red-400">{aiError}</p>}
@@ -674,7 +674,7 @@ export default function ChartsPage() {
           <CardContent className="space-y-2">
             {!bundle?.overlays?.length ? (
               <p className="text-sm text-slate-500">
-                No open overlays. Generate a signal from the Terminal to plot levels.
+                No open trade levels on this pair yet.
               </p>
             ) : (
               bundle.overlays.map((ov) => (
@@ -711,7 +711,7 @@ export default function ChartsPage() {
           <CardContent className="space-y-2 max-h-64 overflow-y-auto">
             {!bundle?.newsMarkers?.length ? (
               <p className="text-sm text-slate-500">
-                No markers. Seed a demo event under News Filters to see live impact windows.
+                No high-impact news markers in this window.
               </p>
             ) : (
               bundle.newsMarkers.map((m) => (

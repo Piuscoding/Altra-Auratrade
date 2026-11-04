@@ -170,9 +170,7 @@ export default function PropChallengePage() {
             <Shield className="h-7 w-7 text-teal-400" />
             Prop Firm Challenges
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Daily / overall DD, consistency, phase tracking — gates apply to signals automatically
-          </p>
+          <p className="text-sm text-slate-400 mt-1">Track challenge rules, drawdown, and phase progress.</p>
         </div>
         <MarketStatusBadge />
       </div>
@@ -190,13 +188,10 @@ export default function PropChallengePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>How prop gates work</CardTitle>
+          <CardTitle>Prop rules</CardTitle>
           <CardDescription>
-            Create a challenge on a broker account typed as prop_firm. While status is active,
-            new signals on that account are blocked if daily DD, overall DD, consecutive losses,
-            trades/day, or open risk limits would be violated. Closed trades update equity and can
-            auto-advance challenge → verification → funded when profit target, min trading days,
-            and consistency rules are met. Daily DD resets in the firm timezone you set.
+            Active challenges block signals that would break daily or overall drawdown, trade limits,
+            or consistency rules. Profit target and minimum trading days advance the phase automatically.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -318,7 +313,7 @@ export default function PropChallengePage() {
 
       <div className="space-y-4">
         {!challenges.length ? (
-          <p className="text-sm text-slate-500">No challenges yet</p>
+          <p className="text-sm text-slate-500">No challenges yet. Create one on a prop-firm broker account.</p>
         ) : (
           challenges.map((ch) => (
             <Card key={ch._id}>

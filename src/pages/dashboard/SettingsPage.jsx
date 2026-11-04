@@ -133,7 +133,7 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Notifications · pre-signal validation · audit trail
+            Notifications, signal safety checks, and your activity log
           </p>
         </div>
         <MarketStatusBadge />
@@ -336,7 +336,7 @@ export default function SettingsPage() {
             Your audit trail
           </CardTitle>
           <CardDescription>
-            Includes pre-signal pass / warn / block events when validation is enabled
+            Recent account activity
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 max-h-80 overflow-y-auto">
